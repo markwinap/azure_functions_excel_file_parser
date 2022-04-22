@@ -11,6 +11,8 @@ using NPOI.XSSF.UserModel;
 using NPOI.SS.UserModel;
 using System.Collections.Generic;
 using System.Data;
+using Azure.Messaging.ServiceBus;
+using Microsoft.Extensions.Configuration;
 
 namespace POCAzureFunctions
 {
@@ -19,7 +21,8 @@ namespace POCAzureFunctions
         [FunctionName("FileHandlerHttpTrigger")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req,
-            ILogger log)
+            ILogger log,
+            ExecutionContext context)
         {
             log.LogInformation("C# HTTP trigger function processed a request.");
 
@@ -27,8 +30,24 @@ namespace POCAzureFunctions
             List<string> rowList = new List<string>();
             ISheet sheet;
 
+
+    
             try
             {
+                //Read settings from appsettings.json
+                var config = new ConfigurationBuilder()
+                    .SetBasePath(context.FunctionAppDirectory)
+                    .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                var connectionString = config["pocazurefunction_SERVICEBUS"];
+                var queue = config["ServiceBus_QUEUE"];
+                // Configure Azure Service Bus
+                await using var client = new ServiceBusClient(connectionString);
+                // Connect to queue
+                ServiceBusSender sender = client.CreateSender(queue);
+
                 var formdata = await req.ReadFormAsync();
                 var file = req.Form.Files["file"];
                 log.LogInformation("File - {0} - {0} - {0}", file.FileName, file.Length, file.ContentType);
@@ -74,8 +93,14 @@ namespace POCAzureFunctions
                         dtTable.Rows.Add(rowList.ToArray());
                     rowList.Clear();
                 }
+                var body = JsonConvert.SerializeObject(dtTable);
+            
+                // Create a message
+                ServiceBusMessage message = new ServiceBusMessage(body);
+                // Send Azure Service Bus Message
+                await sender.SendMessageAsync(message);
 
-                return new OkObjectResult(JsonConvert.SerializeObject(dtTable));
+                return new OkObjectResult(body);
             }
             catch (Exception ex)
             {

@@ -12,9 +12,10 @@ dotnet add package NPOI --version 2.5.5
 dotnet add package DotNetCore.NPOI --version 1.2.3
 dotnet add package RabbitMQ.Client
 dotnet add package MySql.Data
+dotnet add package Azure.Messaging.ServiceBus
 ## Run Function Locally
 ```
-func start
+func host start --port 4034
 ```
 
 ## Debug
